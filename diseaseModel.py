@@ -4,6 +4,7 @@ import numpy as np
 import math
 from enum import Enum
 import copy
+from scipy.spatial import distance_matrix
 from scipy.spatial import distance
 
 class Status(Enum):
@@ -15,13 +16,13 @@ class Status(Enum):
 
 class disease:
     def __init__(self, transmissionProbability, latentTime, mortalityRate, mortalityTime, 
-                 recoveryTime, transmissionDistance, contageousTime):    
+                 recoveryTime, transmissionDistance, contagiousTime):    
         self.transmissionProbability = transmissionProbability
         self.latentTime = latentTime
         self.mortalityRate = mortalityRate
         self.mortalityTime = mortalityTime
         self.recoveryTime = recoveryTime
-        self.contageousTime = contageousTime
+        self.contagiousTime = contagiousTime
         self.transmissionDistance = transmissionDistance
         self.contractedTimeStep = -1
 
@@ -37,7 +38,7 @@ class person:
         self.status = Status.notSick
         self.socialDistancing = socialDistancing
         self.quaranteened = quaranteened
-        self.contageous = False
+        self.contagious = False
         self.position = np.zeros(2)
         self.removePerson = False
         self.disease = None
@@ -77,44 +78,78 @@ class city:
         #Test for proximity
         
         #Setup - need to get it into a 1x2 np array.... probably a better way to do it
-        # centers = self.population[0].position
-        # centers = np.concatenate((np.transpose(centers[:,None]), np.transpose(self.population[0].position[:,None])))
-        # list_iterator = iter(self.population)
-        # next(list_iterator)
-        # next(list_iterator)
-        # for dude in list_iterator:
-        #     centers = np.concatenate((centers, np.transpose(dude.position[:,None])))
+        centers = self.population[0].position
 
-        #distMat = distance.cdist(centers, centers)
-              
+        centers = np.concatenate((np.transpose(centers[:,None]), np.transpose(self.population[0].position[:,None])))
+        list_iterator = iter(self.population)
+        try:
+            next(list_iterator)
+            next(list_iterator)
+        except:
+            return
+        for dude in list_iterator:
+            centers = np.concatenate((centers, np.transpose(dude.position[:,None])))
+        
+        normDistMat = distance_matrix(centers, centers)
+        normDistMatscaled = (1+normDistMat)**3
+        xDistMat = np.divide(np.subtract(centers[:,0,None],np.transpose(centers[:,0,None])),normDistMatscaled)
+        yDistMat = np.divide(np.subtract(centers[:,1,None],np.transpose(centers[:,1,None])),normDistMatscaled)
+        
         #TODO: Convert rest of logic into distance matrix
         
-        for dude in self.population:
-            if dude.contageous and dude.disease.contractedTimeStep != self.currentTimestep:            
-                for otherDude in self.population:
-                    if otherDude.disease is not None:
-                        continue
-                    dist = np.linalg.norm(dude.position - otherDude.position)
+        #withinInfectionRadius = normDistMat < transmissionDistance
+        infected = np.zeros(len(self.population))
+        contagious = np.zeros(len(self.population))
+        disease = []
+        for i in range(len(self.population)):
+            infected[i] = self.population[i].disease is not None
+            if(self.population[i].disease is not None):                
+                infected[i] = 1
+                disease = self.population[i].disease
+                contagious[i] = self.population[i].contagious
+                     
+        diseaseDist = 0
+        try:
+            diseaseDist = disease.transmissionDistance    
+        except:
+            return
+            
+        infectionMap = normDistMat < diseaseDist    
+        
+        exposedPop = np.dot(infectionMap, contagious)
+        
+        atRiskPop = np.multiply(exposedPop, np.logical_not(infected))
+                
+        for i in range(len(self.population)):
+            if atRiskPop[i]:
+                dude = self.population[i]
+                transmitted = random.random() < (disease.transmissionProbability * dude.hygene)
+                if transmitted is True:
+                    dude.disease = copy.deepcopy(disease)
+                    dude.disease.contractedTimeStep = self.currentTimestep 
+                    self.totalSick += 1
+        
+        # for dude in self.population:
+        #     if dude.contagious and dude.disease.contractedTimeStep != self.currentTimestep:            
+        #         for otherDude in self.population:
+        #             if otherDude.disease is not None:
+        #                 continue
+        #             dist = np.linalg.norm(dude.position - otherDude.position)
                     
-                    #Propogate new cases
-                    if dude.disease.transmissionDistance > dist:                            
-                        transmitted = random.random() < (dude.disease.transmissionProbability * otherDude.hygene)
-                        if transmitted is True:
-                            otherDude.disease = copy.deepcopy(dude.disease)
-                            otherDude.disease.contractedTimeStep = self.currentTimestep 
-                            self.totalSick += 1
+        #             #Propogate new cases
+        #             if dude.disease.transmissionDistance > dist:                            
+        #                 transmitted = random.random() < (dude.disease.transmissionProbability * otherDude.hygene)
+        #                 if transmitted is True:
+        #                     otherDude.disease = copy.deepcopy(dude.disease)
+        #                     otherDude.disease.contractedTimeStep = self.currentTimestep 
+        #                     self.totalSick += 1
        
         #Move 
         self.sickNow = 0
         self.sickPresentingSymptoms = 0
-        
-        #Precompute centers for speed
-        centers = []
+        i=0
         for dude in self.population:
-            centers.append(dude.position)
-
-        for dude in self.population:
-            gravityVector = self.getGravityFactor(dude, centers)
+            gravityVector = self.getGravityFactor(dude, normDistMat[:,i], xDistMat[:,i], yDistMat[:,i])
             walkAngle = random.random() * 6.28
             walkVector = dude.movementRate * np.asarray([math.cos(walkAngle), math.sin(walkAngle)])
             dude.position += walkVector + gravityVector            
@@ -132,8 +167,8 @@ class city:
                     self.sickNow += 1
                     self.sickPresentingSymptoms += 1
                 
-                if timeSinceContracted > dude.disease.contageousTime:
-                    dude.contageous = True
+                if timeSinceContracted > dude.disease.contagiousTime:
+                    dude.contagious = True
                 
                 if timeSinceContracted > dude.disease.mortalityTime:
                     mortalityWindow = dude.disease.recoveryTime - dude.disease.mortalityTime    
@@ -148,12 +183,13 @@ class city:
                     self.recoveredCount += 1
                     self.population.remove(dude)
                     continue      
+            i+=1
 
     
     def addPerson(self, person):
         self.population.append(person)
 
-    def getGravityFactor(self, person, centers):
+    def getGravityFactor(self, person, normDistMat, xDistMat, yDistMat):
         center = person.position
         totalForce = np.zeros(2)
      
@@ -172,19 +208,20 @@ class city:
             totalForce[1] = -person.movementRate
                
         #Personal Space Gravity
-        totalForce += self.socialDistanceSize * self.calculateGravity(center, centers)
+        totalForce -= self.socialDistanceSize * self.calculateGravity(normDistMat, xDistMat, yDistMat)
         
         return totalForce
     
-    def calculateGravity(self, center, centers):
-        vdist = center - centers
+    def calculateGravity(self, normDistMat, xDistMat, yDistMat):
+
         
         #+1 needed to stop things less than 1 from blowing up
-        ndist = (np.linalg.norm(vdist, axis=1)+1)**3
-        vdist = vdist[np.argsort(ndist)[1:10]]
-        ndist = ndist[np.argsort(ndist)[1:10]]
         
-        gravVec = np.sum(np.divide(vdist, ndist[:,None]), axis=0)
+        xargs = xDistMat[np.argsort(normDistMat)[1:10]]
+        yargs = yDistMat[np.argsort(normDistMat)[1:10]]
+        gravVec = np.zeros(2)
+        gravVec[0] = np.sum(xargs,axis=0)
+        gravVec[1] = np.sum(yargs,axis=0)
                
         return gravVec
 

@@ -22,7 +22,7 @@ covid19 = disease(transmissionProbability = 0.02,
                   recoveryTime = 14*timeMultiplier, 
                   mortalityTime = 8*timeMultiplier, 
                   transmissionDistance = 6,
-                  contageousTime = 4*timeMultiplier)
+                  contagiousTime = 4*timeMultiplier)
 
 def getNewPerson(isSick, cityDiameter):
     if(isSick):
