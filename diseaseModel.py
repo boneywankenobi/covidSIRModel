@@ -4,6 +4,7 @@ import numpy as np
 import math
 from enum import Enum
 import copy
+from scipy.spatial import distance
 
 class Status(Enum):
     notSick = 0
@@ -72,11 +73,27 @@ class city:
         
     def iterateTimeCycle(self, newGuidance=None):
         self.currentTimestep += 1
+        
         #Test for proximity
+        
+        #Setup - need to get it into a 1x2 np array.... probably a better way to do it
+        # centers = self.population[0].position
+        # centers = np.concatenate((np.transpose(centers[:,None]), np.transpose(self.population[0].position[:,None])))
+        # list_iterator = iter(self.population)
+        # next(list_iterator)
+        # next(list_iterator)
+        # for dude in list_iterator:
+        #     centers = np.concatenate((centers, np.transpose(dude.position[:,None])))
+
+        #distMat = distance.cdist(centers, centers)
               
+        #TODO: Convert rest of logic into distance matrix
+        
         for dude in self.population:
-            if dude.contageous and dude.disease.contractedTimeStep != self.currentTimestep:
+            if dude.contageous and dude.disease.contractedTimeStep != self.currentTimestep:            
                 for otherDude in self.population:
+                    if otherDude.disease is not None:
+                        continue
                     dist = np.linalg.norm(dude.position - otherDude.position)
                     
                     #Propogate new cases
@@ -95,6 +112,7 @@ class city:
         centers = []
         for dude in self.population:
             centers.append(dude.position)
+
         for dude in self.population:
             gravityVector = self.getGravityFactor(dude, centers)
             walkAngle = random.random() * 6.28
@@ -104,8 +122,7 @@ class city:
             #Upkeep
             #Kill / Recover / Present symptoms
             if dude.disease is not None:
-                if self.currentTimestep == 70:
-                    print("Current timestep: " , self.currentTimestep , " dude.disease.contractedTimeStep", dude.disease.contractedTimeStep )
+ 
                 timeSinceContracted = self.currentTimestep - dude.disease.contractedTimeStep  
                 if timeSinceContracted < dude.disease.latentTime:
                     dude.status = Status.sickNoSymptoms   
@@ -130,7 +147,8 @@ class city:
                     print("Oh he fine")
                     self.recoveredCount += 1
                     self.population.remove(dude)
-                    continue             
+                    continue      
+
     
     def addPerson(self, person):
         self.population.append(person)

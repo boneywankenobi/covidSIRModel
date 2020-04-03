@@ -60,8 +60,8 @@ louisville = city(gravityWell = None,
 
 #setup population
 for i in range(0, louisville.startingPopulationSize-1):
-    louisville.population = np.append(louisville.population,getNewPerson(False, louisville.cityDiameter))
-louisville.population = np.append(louisville.population, getNewPerson(True, louisville.cityDiameter))
+    louisville.population.append(getNewPerson(False, louisville.cityDiameter))
+louisville.population.append(getNewPerson(True, louisville.cityDiameter))
 
 runTime = 100*timeMultiplier
 sickNow = np.zeros(runTime)
